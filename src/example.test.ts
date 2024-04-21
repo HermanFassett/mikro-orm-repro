@@ -1,51 +1,43 @@
-import { Entity, MikroORM, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import { ManyToOne } from '@mikro-orm/core';
+import { Entity, MikroORM, PrimaryKey } from '@mikro-orm/mysql';
+import { Migrator } from '@mikro-orm/migrations';
 
 @Entity()
 class User {
+  @PrimaryKey({ autoincrement: false, unsigned: false })
+  id!: number;
+}
 
+@Entity()
+class Message {
   @PrimaryKey()
   id!: number;
 
-  @Property()
-  name: string;
-
-  @Property({ unique: true })
-  email: string;
-
-  constructor(name: string, email: string) {
-    this.name = name;
-    this.email = email;
-  }
-
+  @ManyToOne(() => User)
+	user!: User;
 }
 
 let orm: MikroORM;
 
 beforeAll(async () => {
   orm = await MikroORM.init({
-    dbName: ':memory:',
-    entities: [User],
-    debug: ['query', 'query-params'],
+    dbName: 'mikro_orm_test_migrations',
+    entities: [User, Message],
     allowGlobalContext: true, // only for testing
+    extensions: [Migrator],
   });
-  await orm.schema.refreshDatabase();
+  await orm.schema.ensureDatabase();
 });
-
+beforeEach(() => orm.config.resetServiceCache());
 afterAll(async () => {
+  await orm.schema.dropDatabase();
   await orm.close(true);
 });
 
-test('basic CRUD example', async () => {
-  orm.em.create(User, { name: 'Foo', email: 'foo' });
-  await orm.em.flush();
-  orm.em.clear();
-
-  const user = await orm.em.findOneOrFail(User, { email: 'foo' });
-  expect(user.name).toBe('Foo');
-  user.name = 'Bar';
-  orm.em.remove(user);
-  await orm.em.flush();
-
-  const count = await orm.em.count(User, { email: 'foo' });
-  expect(count).toBe(0);
+test('generate schema migration and migration up fails', async () => {
+  const migrator = new Migrator(orm.em);
+  await migrator.createMigration();
+  await migrator.up(); // throws error
+  // ...
 });
+
